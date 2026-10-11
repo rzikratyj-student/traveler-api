@@ -32,6 +32,7 @@ CREATE TABLE locations (
     departure_date TIMESTAMP WITH TIME ZONE,
     budget DECIMAL(10,2),
     notes TEXT,
+    version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
     CONSTRAINT check_coordinates_lat CHECK (latitude IS NULL OR latitude BETWEEN -90 AND 90),

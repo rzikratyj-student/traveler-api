@@ -48,7 +48,7 @@ class LocationCreate(LocationFields):
 
 class LocationUpdate(LocationFields):
     name: str | None = Field(default=None, min_length=1, max_length=200)
-
+    version: int = Field(gt=0)
     @model_validator(mode="after")
     def validate_name(self):
         if "name" in self.model_fields_set and self.name is None:
@@ -114,6 +114,7 @@ def create_location_router(engine):
     @router.put("/api/locations/{location_id}")
     def update_location(location_id: UUID, payload: LocationUpdate):
         changes = payload.model_dump(exclude_unset=True)
+        expected_version = changes.pop("version")
 
         with engine.begin() as connection:
             plan_id = find_location_plan(connection, location_id)
@@ -125,21 +126,46 @@ def create_location_router(engine):
             ).mappings().first()
             if current is None:
                 raise HTTPException(404, "Location not found")
-
+            if current["version"] != expected_version:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "error": (
+                            "Conflict: location was modified; "
+                            "reload it and retry with the current version"
+                        ),
+                        "current_version": current["version"],
+                    },
+                )
+            
             # Check dates against both saved and incoming values.
             LocationCreate.model_validate({**dict(current_fields(current)), **changes})
 
-            if changes:
-                statement = text(
-                    "UPDATE locations SET "
-                    + ", ".join(f"{field} = :{field}" for field in changes)
-                    + " WHERE id = :id RETURNING *"
+            assignments = [
+                f"{field} = :{field}" for field in changes
+            ]
+            assignments.append("version = version + 1")
+
+            statement = text(
+                "UPDATE locations SET "
+                + ", ".join(assignments)
+                + " WHERE id = :id AND version = :expected_version"
+                + " RETURNING *"
+            )
+            row = connection.execute(
+                statement,
+                {
+                    **changes,
+                    "id": location_id,
+                    "expected_version": expected_version,
+                },
+            ).mappings().first()
+
+            if row is None:
+                raise HTTPException(
+                    409,
+                    "Conflict: location was modified; reload it and retry",
                 )
-                row = connection.execute(
-                    statement, {**changes, "id": location_id}
-                ).mappings().one()
-            else:
-                row = current
 
         return serialize_row(row)
 

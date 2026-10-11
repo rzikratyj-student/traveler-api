@@ -64,6 +64,21 @@ def serialize_row(row):
 
 
 def create_plan_router(engine):
+    @router.get("")
+    def list_plans():
+        with engine.connect() as connection:
+            rows = connection.execute(
+                text("""
+                    SELECT p.*, COUNT(l.id) AS location_count
+                    FROM travel_plans AS p
+                    LEFT JOIN locations AS l
+                        ON l.travel_plan_id = p.id
+                    GROUP BY p.id
+                    ORDER BY p.created_at DESC, p.id
+                """)
+            ).mappings().all()
+
+        return [serialize_row(row) for row in rows]
     @router.post("", status_code=201)
     def create_plan(payload: PlanFields):
         values = payload.model_dump()

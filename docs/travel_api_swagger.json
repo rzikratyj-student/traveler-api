@@ -20,7 +20,9 @@
       "get": {
         "summary": "List travel plans",
         "description": "Retrieve all travel plans",
-        "tags": ["Travel Plans"],
+        "tags": [
+          "Travel Plans"
+        ],
         "responses": {
           "200": {
             "description": "List of travel plans",
@@ -43,7 +45,9 @@
       "post": {
         "summary": "Create travel plan",
         "description": "Create a new travel plan",
-        "tags": ["Travel Plans"],
+        "tags": [
+          "Travel Plans"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -78,7 +82,9 @@
       "get": {
         "summary": "Get travel plan",
         "description": "Retrieve a specific travel plan with all locations",
-        "tags": ["Travel Plans"],
+        "tags": [
+          "Travel Plans"
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/travel_plan_id"
@@ -106,7 +112,9 @@
       "put": {
         "summary": "Update travel plan",
         "description": "Update a travel plan using optimistic locking",
-        "tags": ["Travel Plans"],
+        "tags": [
+          "Travel Plans"
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/travel_plan_id"
@@ -150,7 +158,9 @@
       "delete": {
         "summary": "Delete travel plan",
         "description": "Delete a travel plan and all associated locations",
-        "tags": ["Travel Plans"],
+        "tags": [
+          "Travel Plans"
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/travel_plan_id"
@@ -173,7 +183,9 @@
       "post": {
         "summary": "Add location to plan",
         "description": "Add a new location to a travel plan (auto-ordered)",
-        "tags": ["Locations"],
+        "tags": [
+          "Locations"
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/travel_plan_id"
@@ -216,7 +228,9 @@
       "put": {
         "summary": "Update location",
         "description": "Update location details",
-        "tags": ["Locations"],
+        "tags": [
+          "Locations"
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/location_id"
@@ -251,13 +265,25 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
+          },
+          "409": {
+            "description": "The location was modified since the client read it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictResponse"
+                }
+              }
+            }
           }
         }
       },
       "delete": {
         "summary": "Delete location",
         "description": "Delete a location from travel plan",
-        "tags": ["Locations"],
+        "tags": [
+          "Locations"
+        ],
         "parameters": [
           {
             "$ref": "#/components/parameters/location_id"
@@ -280,7 +306,9 @@
       "get": {
         "summary": "Health check",
         "description": "Check API health status",
-        "tags": ["System"],
+        "tags": [
+          "System"
+        ],
         "responses": {
           "200": {
             "description": "API is healthy",
@@ -310,7 +338,15 @@
     "schemas": {
       "TravelPlan": {
         "type": "object",
-        "required": ["id", "title", "currency", "is_public", "version", "created_at", "updated_at"],
+        "required": [
+          "id",
+          "title",
+          "currency",
+          "is_public",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
         "properties": {
           "id": {
             "type": "string",
@@ -415,7 +451,9 @@
       },
       "CreateTravelPlanRequest": {
         "type": "object",
-        "required": ["title"],
+        "required": [
+          "title"
+        ],
         "properties": {
           "title": {
             "type": "string",
@@ -460,26 +498,68 @@
         }
       },
       "UpdateTravelPlanRequest": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/CreateTravelPlanRequest"
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Title of the travel plan"
           },
-          {
-            "type": "object",
-            "required": ["version"],
-            "properties": {
-              "version": {
-                "type": "integer",
-                "minimum": 1,
-                "description": "Current version number for optimistic locking"
-              }
-            }
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "Optional description"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Start date of the trip"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "End date of the trip (must be >= startDate)"
+          },
+          "budget": {
+            "type": "number",
+            "minimum": 0,
+            "nullable": true,
+            "description": "Total budget for the trip"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "default": "USD",
+            "description": "Currency code (ISO 4217)"
+          },
+          "is_public": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether the plan should be publicly visible"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Current resource version for optimistic locking"
           }
-        ]
+        }
       },
       "Location": {
         "type": "object",
-        "required": ["id", "travel_plan_id", "name", "visit_order", "created_at"],
+        "required": [
+          "created_at",
+          "id",
+          "name",
+          "travel_plan_id",
+          "version",
+          "visit_order"
+        ],
         "properties": {
           "id": {
             "type": "string",
@@ -502,25 +582,25 @@
             "nullable": true,
             "description": "Address or description of the location"
           },
-	  "latitude": {
-	    "type": "number",
+          "latitude": {
+            "type": "number",
             "format": "decimal",
             "minimum": -90,
             "maximum": 90,
-            "multipleOf": 0.000001,
+            "multipleOf": 1e-06,
             "example": 48.858844,
             "nullable": true,
             "description": "Latitude coordinate with 6 decimal precision (~11cm accuracy)"
           },
           "longitude": {
-             "type": "number", 
-             "format": "decimal",
-             "minimum": -180,
-             "maximum": 180,
-             "multipleOf": 0.000001,
-             "example": 2.294351,
-             "nullable": true,
-             "description": "Longitude coordinate with 6 decimal precision (~11cm accuracy)"
+            "type": "number",
+            "format": "decimal",
+            "minimum": -180,
+            "maximum": 180,
+            "multipleOf": 1e-06,
+            "example": 2.294351,
+            "nullable": true,
+            "description": "Longitude coordinate with 6 decimal precision (~11cm accuracy)"
           },
           "visit_order": {
             "type": "integer",
@@ -554,12 +634,19 @@
             "type": "string",
             "format": "date-time",
             "description": "Creation timestamp"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Current resource version for optimistic locking"
           }
         }
       },
       "CreateLocationRequest": {
         "type": "object",
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "properties": {
           "name": {
             "type": "string",
@@ -608,6 +695,12 @@
             "type": "string",
             "nullable": true,
             "description": "Additional notes"
+          },
+          "visit_order": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional visit position. If omitted or null, the server assigns the next position.",
+            "nullable": true
           }
         }
       },
@@ -661,45 +754,46 @@
             "type": "string",
             "nullable": true,
             "description": "Additional notes"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Current resource version for optimistic locking"
+          },
+          "visit_order": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Visit position, unique within the plan. An occupied position is rejected with HTTP 400."
           }
-        }
+        },
+        "required": [
+          "version"
+        ]
       },
       "HealthCheck": {
         "type": "object",
-        "required": ["status", "timestamp"],
+        "required": [
+          "status"
+        ],
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["healthy", "unhealthy"],
-            "description": "Overall health status"
+            "enum": [
+              "ok",
+              "error"
+            ]
           },
-          "timestamp": {
+          "detail": {
             "type": "string",
-            "format": "date-time",
-            "description": "Time of health check"
-          },
-          "uptime": {
-            "type": "number",
-            "description": "Uptime in milliseconds"
-          },
-          "database": {
-            "type": "object",
-            "properties": {
-              "status": {
-                "type": "string",
-                "enum": ["healthy", "unhealthy"]
-              },
-              "responseTime": {
-                "type": "number",
-                "description": "Database response time in milliseconds"
-              }
-            }
+            "description": "Present when the database is unavailable"
           }
         }
       },
       "ErrorResponse": {
         "type": "object",
-        "required": ["error"],
+        "required": [
+          "error"
+        ],
         "properties": {
           "error": {
             "type": "string",
@@ -721,7 +815,10 @@
       },
       "ConflictResponse": {
         "type": "object",
-        "required": ["error", "currentVersion"],
+        "required": [
+          "error",
+          "current_version"
+        ],
         "properties": {
           "error": {
             "type": "string",
@@ -773,7 +870,9 @@
                 "summary": "Missing required field",
                 "value": {
                   "error": "Validation error",
-                  "details": ["Title is required"],
+                  "details": [
+                    "Title is required"
+                  ],
                   "timestamp": "2025-01-16T10:30:00Z"
                 }
               },
@@ -781,7 +880,9 @@
                 "summary": "Invalid date range",
                 "value": {
                   "error": "Validation error",
-                  "details": ["End date must be after start date"],
+                  "details": [
+                    "End date must be after start date"
+                  ],
                   "timestamp": "2025-01-16T10:30:00Z"
                 }
               }
