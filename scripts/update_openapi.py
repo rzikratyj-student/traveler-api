@@ -94,6 +94,23 @@ schemas["HealthCheck"] = {
     },
 }
 
+# PostgreSQL INTEGER limit for version and visit_order.
+INT32_MAX = 2_147_483_647
+for name in ("Location", "UpdateLocationRequest", "UpdateTravelPlanRequest"):
+    schemas[name]["properties"]["version"]["maximum"] = INT32_MAX
+for name in ("Location", "CreateLocationRequest", "UpdateLocationRequest"):
+    schemas[name]["properties"]["visit_order"]["maximum"] = INT32_MAX
+
+# An invalid UUID in the path is a validation error (HTTP 400).
+for route, methods in (
+    ("/api/travel-plans/{id}", ("get", "delete")),
+    ("/api/locations/{id}", ("delete",)),
+):
+    for method in methods:
+        spec["paths"][route][method]["responses"].setdefault(
+            "400", {"$ref": "#/components/responses/ValidationError"}
+        )
+
 path.write_text(
     json.dumps(spec, ensure_ascii=False, indent=2) + "\n",
     encoding="utf-8",

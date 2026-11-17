@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from pathlib import Path
@@ -33,6 +34,25 @@ engine = create_engine(
 )
 
 app = FastAPI(title="TravelerAPI")
+
+# Serve the maintained contract (docs/travel_api_swagger.json) at
+# /openapi.json and /docs instead of the auto-generated schema, which
+# would advertise HTTP 422 while this API answers validation errors
+# with 400. tests/test_openapi_contract.py keeps the two in sync.
+OPENAPI_PATH = (
+    Path(__file__).resolve().parent.parent / "docs" / "travel_api_swagger.json"
+)
+
+
+def stored_openapi():
+    if app.openapi_schema is None:
+        app.openapi_schema = json.loads(
+            OPENAPI_PATH.read_text(encoding="utf-8-sig")
+        )
+    return app.openapi_schema
+
+
+app.openapi = stored_openapi
 
 # PostgreSQL error codes (SQLSTATE) that are caused by client data.
 CHECK_VIOLATION = "23514"

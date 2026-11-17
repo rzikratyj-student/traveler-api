@@ -106,6 +106,9 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
           }
         }
       },
@@ -175,6 +178,9 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
           }
         }
       }
@@ -298,6 +304,9 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
           }
         }
       }
@@ -546,7 +555,8 @@
           "version": {
             "type": "integer",
             "minimum": 1,
-            "description": "Current resource version for optimistic locking"
+            "description": "Current resource version for optimistic locking",
+            "maximum": 2147483647
           }
         }
       },
@@ -605,7 +615,8 @@
           "visit_order": {
             "type": "integer",
             "minimum": 1,
-            "description": "Order in which this location will be visited"
+            "description": "Order in which this location will be visited",
+            "maximum": 2147483647
           },
           "arrival_date": {
             "type": "string",
@@ -638,7 +649,8 @@
           "version": {
             "type": "integer",
             "minimum": 1,
-            "description": "Current resource version for optimistic locking"
+            "description": "Current resource version for optimistic locking",
+            "maximum": 2147483647
           }
         }
       },
@@ -700,7 +712,8 @@
             "type": "integer",
             "minimum": 1,
             "description": "Optional visit position. If omitted or null, the server assigns the next position.",
-            "nullable": true
+            "nullable": true,
+            "maximum": 2147483647
           }
         }
       },
@@ -758,12 +771,14 @@
           "version": {
             "type": "integer",
             "minimum": 1,
-            "description": "Current resource version for optimistic locking"
+            "description": "Current resource version for optimistic locking",
+            "maximum": 2147483647
           },
           "visit_order": {
             "type": "integer",
             "minimum": 1,
-            "description": "Visit position, unique within the plan. An occupied position is rejected with HTTP 400."
+            "description": "Visit position, unique within the plan. An occupied position is rejected with HTTP 400.",
+            "maximum": 2147483647
           }
         },
         "required": [
