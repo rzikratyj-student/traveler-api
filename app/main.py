@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 
@@ -8,9 +9,11 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import URL, create_engine, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from pydantic import ValidationError
+
 from app.locations import create_location_router
 from app.plans import create_plan_router
+
+logger = logging.getLogger("traveler_api")
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
@@ -31,12 +34,11 @@ engine = create_engine(
 
 app = FastAPI(title="TravelerAPI")
 
-@app.exception_handler(ValidationError)
-async def model_validation_error(request: Request, exception: ValidationError):
-    return JSONResponse(
-        status_code=400,
-        content={"error": "Validation error: invalid field combination"},
-    )
+# PostgreSQL error codes (SQLSTATE) that are caused by client data.
+CHECK_VIOLATION = "23514"
+UNIQUE_VIOLATION = "23505"
+
+
 @app.get("/health")
 def health():
     try:
@@ -76,9 +78,42 @@ async def validation_error(request: Request, exception: RequestValidationError):
 async def database_validation_error(
     request: Request, exception: IntegrityError
 ):
+    sqlstate = getattr(exception.orig, "sqlstate", None)
+    diag = getattr(exception.orig, "diag", None)
+    constraint = getattr(diag, "constraint_name", None)
+
+    if sqlstate == UNIQUE_VIOLATION and constraint == "unique_plan_order":
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": (
+                    "Validation error: visit_order is already used "
+                    "in this travel plan"
+                )
+            },
+        )
+    if sqlstate == CHECK_VIOLATION:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Validation error: database constraint violated"},
+        )
+
+    # Any other integrity error is a server bug, not a client mistake.
+    return await internal_error(request, exception)
+
+
+@app.exception_handler(Exception)
+async def internal_error(request: Request, exception: Exception):
+    # Full details go to the server log only, never to the client.
+    logger.error(
+        "Unhandled error on %s %s",
+        request.method,
+        request.url.path,
+        exc_info=exception,
+    )
     return JSONResponse(
-        status_code=400,
-        content={"error": "Validation error: database constraint violated"},
+        status_code=500,
+        content={"error": "Internal server error"},
     )
 
 

@@ -1,26 +1,61 @@
 from datetime import date
 from decimal import Decimal
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Response
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy import text
 
 router = APIRouter(prefix="/api/travel-plans", tags=["Travel plans"])
 
+# Largest value of PostgreSQL INTEGER (version, visit_order).
+# Bigger numbers would fail in the database with HTTP 500.
+INT32_MAX = 2_147_483_647
 
-class PlanFields(BaseModel):
+
+def reject_number(value):
+    # Pydantic would turn 0 into 1970-01-01; dates must be ISO strings.
+    if isinstance(value, (int, float)):
+        raise ValueError("Dates must be ISO 8601 strings")
+    return value
+
+
+IsoDate = Annotated[date, BeforeValidator(reject_number)]
+
+
+class StrictInput(BaseModel):
+    """Common rules for every request body."""
+
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
+    @field_validator("*")
+    @classmethod
+    def reject_nul_character(cls, value):
+        # PostgreSQL text cannot store the NUL (\u0000) character.
+        if isinstance(value, str) and "\x00" in value:
+            raise ValueError("Text must not contain the NUL character")
+        return value
+
+
+class PlanFields(StrictInput):
     title: str = Field(min_length=1, max_length=200)
     description: str | None = None
-    start_date: date | None = None
-    end_date: date | None = None
+    start_date: IsoDate | None = None
+    end_date: IsoDate | None = None
     budget: Decimal | None = Field(
         default=None, ge=0, max_digits=10, decimal_places=2
     )
     currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
-    is_public: bool = False
+    # strict=True: only JSON true/false, not "yes" or 1.
+    is_public: bool = Field(default=False, strict=True)
 
     @model_validator(mode="after")
     def validate_dates(self):
@@ -33,19 +68,18 @@ class PlanFields(BaseModel):
         return self
 
 
-class PlanUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    version: int = Field(gt=0)
+class PlanUpdate(StrictInput):
+    # strict=True: only JSON integers, not true or "1".
+    version: int = Field(gt=0, le=INT32_MAX, strict=True)
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
-    start_date: date | None = None
-    end_date: date | None = None
+    start_date: IsoDate | None = None
+    end_date: IsoDate | None = None
     budget: Decimal | None = Field(
         default=None, ge=0, max_digits=10, decimal_places=2
     )
     currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
-    is_public: bool | None = None
+    is_public: bool | None = Field(default=None, strict=True)
 
     @model_validator(mode="after")
     def validate_required_fields(self):

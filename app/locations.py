@@ -1,17 +1,18 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Response
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BeforeValidator, Field, ValidationError, model_validator
 from sqlalchemy import text
 
-from app.plans import serialize_row
+from app.plans import INT32_MAX, StrictInput, reject_number, serialize_row
+
+IsoDateTime = Annotated[datetime, BeforeValidator(reject_number)]
 
 
-class LocationFields(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
+class LocationFields(StrictInput):
     address: str | None = None
     latitude: Decimal | None = Field(
         default=None, ge=-90, le=90, decimal_places=6
@@ -19,9 +20,11 @@ class LocationFields(BaseModel):
     longitude: Decimal | None = Field(
         default=None, ge=-180, le=180, decimal_places=6
     )
-    visit_order: int | None = Field(default=None, gt=0)
-    arrival_date: datetime | None = None
-    departure_date: datetime | None = None
+    visit_order: int | None = Field(
+        default=None, gt=0, le=INT32_MAX, strict=True
+    )
+    arrival_date: IsoDateTime | None = None
+    departure_date: IsoDateTime | None = None
     budget: Decimal | None = Field(
         default=None, ge=0, max_digits=10, decimal_places=2
     )
@@ -48,7 +51,8 @@ class LocationCreate(LocationFields):
 
 class LocationUpdate(LocationFields):
     name: str | None = Field(default=None, min_length=1, max_length=200)
-    version: int = Field(gt=0)
+    version: int = Field(gt=0, le=INT32_MAX, strict=True)
+
     @model_validator(mode="after")
     def validate_name(self):
         if "name" in self.model_fields_set and self.name is None:
@@ -120,26 +124,26 @@ def create_location_router(engine):
             plan_id = find_location_plan(connection, location_id)
             lock_plan(connection, plan_id)
 
+            # Lock the location row too, so a write that bypasses the
+            # plan lock cannot change it between this check and UPDATE.
             current = connection.execute(
-                text("SELECT * FROM locations WHERE id = :id"),
+                text("SELECT * FROM locations WHERE id = :id FOR UPDATE"),
                 {"id": location_id},
             ).mappings().first()
             if current is None:
                 raise HTTPException(404, "Location not found")
             if current["version"] != expected_version:
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "error": (
-                            "Conflict: location was modified; "
-                            "reload it and retry with the current version"
-                        ),
-                        "current_version": current["version"],
-                    },
-                )
-            
+                raise location_conflict(current["version"])
+
             # Check dates against both saved and incoming values.
-            LocationCreate.model_validate({**dict(current_fields(current)), **changes})
+            try:
+                LocationCreate.model_validate(
+                    {**current_fields(current), **changes}
+                )
+            except ValidationError:
+                raise HTTPException(
+                    400, "Validation error: invalid field combination"
+                ) from None
 
             assignments = [
                 f"{field} = :{field}" for field in changes
@@ -162,10 +166,8 @@ def create_location_router(engine):
             ).mappings().first()
 
             if row is None:
-                raise HTTPException(
-                    409,
-                    "Conflict: location was modified; reload it and retry",
-                )
+                # Unreachable while the row is locked; kept as a safeguard.
+                raise location_conflict(current["version"])
 
         return serialize_row(row)
 
@@ -184,6 +186,19 @@ def create_location_router(engine):
         return Response(status_code=204)
 
     return router
+
+
+def location_conflict(current_version):
+    return HTTPException(
+        status_code=409,
+        detail={
+            "error": (
+                "Conflict: location was modified; "
+                "reload it and retry with the current version"
+            ),
+            "current_version": current_version,
+        },
+    )
 
 
 def current_fields(row):
