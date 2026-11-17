@@ -20,11 +20,12 @@ erDiagram
         text address "nullable"
         decimal_10_6 latitude "nullable, CHECK -90 to 90"
         decimal_11_6 longitude "nullable, CHECK -180 to 180"  
-        integer visit_order "NOT NULL, CHECK > 0, auto-assign"
+        integer visit_order "CHECK > 0, UNIQUE per plan, auto-assign"
         timestamptz arrival_date "nullable"
         timestamptz departure_date "nullable, CHECK >= arrival"
         decimal_10_2 budget "nullable, CHECK >= 0"
         text notes "nullable"
+        integer version "NOT NULL, DEFAULT 1, CHECK > 0, optimistic lock"
         timestamptz created_at "DEFAULT NOW()"
     }
     
