@@ -13,8 +13,11 @@ plan_id: jsonpath "$.id"
 GET {{host}}/api/travel-plans
 HTTP 200
 [Asserts]
-jsonpath "$[?(@.id == '{{plan_id}}')].id" == "{{plan_id}}"
-jsonpath "$[?(@.id == '{{plan_id}}')].location_count" == 0
+# A filter $[?(...)] always returns a list; "nth 0" takes its element.
+# This works the same in Hurl 6 and Hurl 7.
+jsonpath "$[?(@.id == '{{plan_id}}')]" count == 1
+jsonpath "$[?(@.id == '{{plan_id}}')].id" nth 0 == "{{plan_id}}"
+jsonpath "$[?(@.id == '{{plan_id}}')].location_count" nth 0 == 0
 
 
 # Add a location
@@ -27,12 +30,11 @@ Content-Type: application/json
 HTTP 201
 
 # Location count is updated
-# Location count is updated
 GET {{host}}/api/travel-plans
 
 HTTP 200
 [Asserts]
-jsonpath "$[?(@.id == '{{plan_id}}')].location_count" == 1
+jsonpath "$[?(@.id == '{{plan_id}}')].location_count" nth 0 == 1
 
 # Cleanup
 DELETE {{host}}/api/travel-plans/{{plan_id}}
@@ -44,4 +46,4 @@ GET {{host}}/api/travel-plans
 
 HTTP 200
 [Asserts]
-jsonpath "$[?(@.id == '{{plan_id}}')].id" not exists
+jsonpath "$[?(@.id == '{{plan_id}}')]" count == 0

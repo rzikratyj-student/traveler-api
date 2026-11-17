@@ -9,7 +9,6 @@ Content-Type: application/json
 HTTP 201
 [Captures]
 location_plan_id: jsonpath "$.id"
-location1_version: jsonpath "$.version"
 
 # Test 1: Add first location (auto-ordered)
 POST {{host}}/api/travel-plans/{{location_plan_id}}/locations
@@ -28,6 +27,7 @@ Content-Type: application/json
 HTTP 201
 [Captures]
 location1_id: jsonpath "$.id"
+location1_version: jsonpath "$.version"
 
 [Asserts]
 jsonpath "$.name" == "Eiffel Tower"
