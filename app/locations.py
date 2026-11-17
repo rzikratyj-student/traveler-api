@@ -163,11 +163,7 @@ def create_location_router(engine):
                     "id": location_id,
                     "expected_version": expected_version,
                 },
-            ).mappings().first()
-
-            if row is None:
-                # Unreachable while the row is locked; kept as a safeguard.
-                raise location_conflict(current["version"])
+            ).mappings().one()
 
         return serialize_row(row)
 

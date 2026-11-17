@@ -137,14 +137,14 @@ def create_plan_router(engine):
 
     @router.get("/{plan_id}")
     def get_plan(plan_id: UUID):
-        with engine.begin() as connection:
-            # Keep the plan and locations consistent while reading them.
+        # REPEATABLE READ: both SELECTs see one snapshot, so the plan and
+        # its locations are consistent without blocking any writer.
+        with engine.connect().execution_options(
+            isolation_level="REPEATABLE READ"
+        ) as connection, connection.begin():
+            connection.exec_driver_sql("SET TRANSACTION READ ONLY")
             row = connection.execute(
-                text("""
-                    SELECT * FROM travel_plans
-                    WHERE id = :id
-                    FOR SHARE
-                """),
+                text("SELECT * FROM travel_plans WHERE id = :id"),
                 {"id": plan_id},
             ).mappings().first()
 
