@@ -108,7 +108,22 @@ GET {{host}}/api/travel-plans/{{location_plan_id}}
 HTTP 200
 [Asserts]
 jsonpath "$.locations" count == 2
-# Order may have gaps (1,3) which is acceptable
+# Locations after the deleted one are renumbered: 1,3 -> 1,2
+jsonpath "$.locations[0].visit_order" == 1
+jsonpath "$.locations[1].visit_order" == 2
+jsonpath "$.locations[1].name" == "Arc de Triomphe"
+jsonpath "$.locations[1].version" == 2
+
+# Next automatic position follows without a gap
+POST {{host}}/api/travel-plans/{{location_plan_id}}/locations
+Content-Type: application/json
+{
+  "name": "Notre-Dame"
+}
+
+HTTP 201
+[Asserts]
+jsonpath "$.visit_order" == 3
 
 # Cleanup
 DELETE {{host}}/api/travel-plans/{{location_plan_id}}

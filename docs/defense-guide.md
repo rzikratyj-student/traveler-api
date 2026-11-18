@@ -71,7 +71,7 @@ tests/test_*.py             pytest: конкурентність, обробка
 | Видалення плану | `delete_plan` (`plans.py:223`) | `DELETE ... RETURNING id` (каскад) | 204, 400, 404 |
 | Додати локацію | `create_location` (`locations.py:88`) | блокування плану, `MAX+1`, `INSERT` | 201, 400, 404 |
 | Оновити локацію | `update_location` (`locations.py:119`) | блокування плану й локації, перевірка `version`, `UPDATE` | 200, 400, 404, 409 |
-| Видалити локацію | `delete_location` (`locations.py:175`) | блокування плану, `DELETE` | 204, 400, 404 |
+| Видалити локацію | `delete_location` | блокування плану, `DELETE`, зсув наступних на −1 (`close_gap`) | 204, 400, 404 |
 
 `RETURNING *` повертає збережений рядок тим самим запитом, тож другий `SELECT` не потрібен.
 

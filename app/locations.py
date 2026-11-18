@@ -173,15 +173,49 @@ def create_location_router(engine):
             plan_id = find_location_plan(connection, location_id)
             lock_plan(connection, plan_id)
             deleted = connection.execute(
-                text("DELETE FROM locations WHERE id = :id RETURNING id"),
+                text("""
+                    DELETE FROM locations WHERE id = :id
+                    RETURNING visit_order
+                """),
                 {"id": location_id},
             ).first()
             if deleted is None:
                 raise HTTPException(404, "Location not found")
 
+            close_gap(connection, plan_id, deleted.visit_order)
+
         return Response(status_code=204)
 
     return router
+
+
+def close_gap(connection, plan_id, removed_order):
+    """Shift the locations after a deleted one down by 1 (1,3,4 -> 1,2,3).
+
+    The caller holds the plan lock. Rows move one at a time in ascending
+    order, so each target number is already free and the non-deferrable
+    UNIQUE (travel_plan_id, visit_order) is never violated mid-way.
+    A single UPDATE could visit rows in any order and hit the constraint.
+    The version grows because visit_order of these locations changes.
+    """
+    later = connection.execute(
+        text("""
+            SELECT id FROM locations
+            WHERE travel_plan_id = :plan_id AND visit_order > :removed
+            ORDER BY visit_order
+        """),
+        {"plan_id": plan_id, "removed": removed_order},
+    ).scalars().all()
+
+    for location_id in later:
+        connection.execute(
+            text("""
+                UPDATE locations
+                SET visit_order = visit_order - 1, version = version + 1
+                WHERE id = :id
+            """),
+            {"id": location_id},
+        )
 
 
 def location_conflict(current_version):

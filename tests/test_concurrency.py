@@ -150,3 +150,33 @@ def test_concurrent_location_updates(plan):
     assert result["version"] == 3
     assert result["budget"] == 75
     assert result["notes"] == "Updated"
+
+def test_concurrent_deletes_and_inserts_keep_order_contiguous(plan):
+    path = f"/api/travel-plans/{plan['id']}/locations"
+    created = [
+        request("POST", path, json={"name": f"Start {i}"}).json()
+        for i in range(10)
+    ]
+
+    # Delete every other location while new ones are being added.
+    barrier = Barrier(10)
+
+    def send(job):
+        method, url, payload = job
+        with httpx.Client(base_url=BASE_URL, timeout=20,
+                          trust_env=False) as client:
+            barrier.wait(timeout=20)
+            return client.request(method, url, json=payload)
+
+    jobs = [("DELETE", f"/api/locations/{item['id']}", None)
+            for item in created[::2]]
+    jobs += [("POST", path, {"name": f"New {i}"}) for i in range(5)]
+    with ThreadPoolExecutor(max_workers=len(jobs)) as executor:
+        responses = list(executor.map(send, jobs))
+
+    assert sorted(r.status_code for r in responses) == [201] * 5 + [204] * 5
+
+    saved = request("GET", f"/api/travel-plans/{plan['id']}").json()
+    assert [item["visit_order"] for item in saved["locations"]] == list(
+        range(1, 11)
+    )
