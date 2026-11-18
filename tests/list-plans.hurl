@@ -13,11 +13,11 @@ plan_id: jsonpath "$.id"
 GET {{host}}/api/travel-plans
 HTTP 200
 [Asserts]
-# A filter $[?(...)] always returns a list; "nth 0" takes its element.
-# This works the same in Hurl 6 and Hurl 7.
-jsonpath "$[?(@.id == '{{plan_id}}')]" count == 1
-jsonpath "$[?(@.id == '{{plan_id}}')].id" nth 0 == "{{plan_id}}"
-jsonpath "$[?(@.id == '{{plan_id}}')].location_count" nth 0 == 0
+# JSONPath filters $[?(...)] return a list in Hurl 7 but a single value
+# in Hurl 4-6 and 8, so the body text is checked instead. The API writes
+# compact JSON and location_count is the last field of each plan.
+body contains "\"id\":\"{{plan_id}}\""
+body matches "\"id\":\"{{plan_id}}\"[^}]*\"location_count\":0}"
 
 
 # Add a location
@@ -34,7 +34,7 @@ GET {{host}}/api/travel-plans
 
 HTTP 200
 [Asserts]
-jsonpath "$[?(@.id == '{{plan_id}}')].location_count" nth 0 == 1
+body matches "\"id\":\"{{plan_id}}\"[^}]*\"location_count\":1}"
 
 # Cleanup
 DELETE {{host}}/api/travel-plans/{{plan_id}}
@@ -46,4 +46,4 @@ GET {{host}}/api/travel-plans
 
 HTTP 200
 [Asserts]
-jsonpath "$[?(@.id == '{{plan_id}}')]" count == 0
+body not contains "{{plan_id}}"

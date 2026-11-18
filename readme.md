@@ -28,7 +28,7 @@ Python + FastAPI + PostgreSQL. Конкурентний доступ розв'я
 
 - Python 3.12+ (перевірено на 3.13)
 - PostgreSQL 13+ (потрібна вбудована `gen_random_uuid()`; перевірено на 16)
-- [Hurl](https://hurl.dev) 6 або 7 (перевірено на 7.1.0)
+- [Hurl](https://hurl.dev) 4.3+ (перевірено на 4.3.0, 5.0.1, 6.1.1, 7.1.0, 8.0.0)
 
 ## Запуск (Windows, PowerShell)
 
