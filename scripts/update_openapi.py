@@ -33,8 +33,9 @@ visit_order = {
     "type": "integer",
     "minimum": 1,
     "description": (
-        "Visit position, unique within the plan. "
-        "An occupied position is rejected with HTTP 400."
+        "Visit position, 1..N without gaps within the plan. "
+        "Moving a location shifts the ones in between by one; "
+        "a position outside 1..N is rejected with HTTP 400."
     ),
 }
 update_location["properties"]["visit_order"] = deepcopy(visit_order)
@@ -43,8 +44,8 @@ schemas["CreateLocationRequest"]["properties"]["visit_order"] = {
     **deepcopy(visit_order),
     "nullable": True,
     "description": (
-        "Optional visit position. If omitted or null, "
-        "the server assigns the next position."
+        "Optional visit position 1..N+1. If omitted or null, the server "
+        "appends the location; otherwise later locations shift by one."
     ),
 }
 

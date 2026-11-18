@@ -180,3 +180,40 @@ def test_concurrent_deletes_and_inserts_keep_order_contiguous(plan):
     assert [item["visit_order"] for item in saved["locations"]] == list(
         range(1, 11)
     )
+
+
+def test_concurrent_moves_keep_order_contiguous(plan):
+    path = f"/api/travel-plans/{plan['id']}/locations"
+    created = [
+        request("POST", path, json={"name": f"L{i}"}).json()
+        for i in range(6)
+    ]
+
+    # Each client moves a different location to the opposite end.
+    barrier = Barrier(len(created))
+
+    def move(item):
+        with httpx.Client(base_url=BASE_URL, timeout=20,
+                          trust_env=False) as client:
+            barrier.wait(timeout=20)
+            return client.put(
+                f"/api/locations/{item['id']}",
+                json={"visit_order": 7 - item["visit_order"],
+                      "version": item["version"]},
+            )
+
+    with ThreadPoolExecutor(max_workers=len(created)) as executor:
+        responses = list(executor.map(move, created))
+
+    # A move shifts neighbours and raises their version, so later
+    # clients may get 409; nobody may get anything else.
+    statuses = [r.status_code for r in responses]
+    assert set(statuses) <= {200, 409}, statuses
+    assert 200 in statuses
+
+    saved = request("GET", f"/api/travel-plans/{plan['id']}").json()
+    locations = saved["locations"]
+    assert [item["visit_order"] for item in locations] == list(range(1, 7))
+    assert sorted(item["name"] for item in locations) == [
+        f"L{i}" for i in range(6)
+    ]

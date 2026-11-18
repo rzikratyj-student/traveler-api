@@ -184,43 +184,87 @@ second_id: jsonpath "$.id"
 [Asserts]
 jsonpath "$.visit_order" == 2
 
-# Occupied position on create
+# Insert in the middle: existing 1,2 move to 2,3 and get a new version
 POST {{host}}/api/travel-plans/{{plan_id}}/locations
 Content-Type: application/json
 {
-  "name": "Duplicate order",
+  "name": "Inserted",
   "visit_order": 1
+}
+
+HTTP 201
+[Asserts]
+jsonpath "$.visit_order" == 1
+
+GET {{host}}/api/travel-plans/{{plan_id}}
+
+HTTP 200
+[Asserts]
+jsonpath "$.locations[*].name" count == 3
+jsonpath "$.locations[0].name" == "Inserted"
+jsonpath "$.locations[1].name" == "First"
+jsonpath "$.locations[1].version" == 2
+jsonpath "$.locations[2].name" == "Second"
+jsonpath "$.locations[2].visit_order" == 3
+
+# A gap is not allowed: with 3 locations a new one may take 1..4
+POST {{host}}/api/travel-plans/{{plan_id}}/locations
+Content-Type: application/json
+{
+  "name": "Too far",
+  "visit_order": 5
 }
 
 HTTP 400
 [Asserts]
-jsonpath "$.error" contains "visit_order"
+jsonpath "$.error" contains "between 1 and 4"
 
-# Occupied position on update
+# A move must stay within 1..3
+PUT {{host}}/api/locations/{{second_id}}
+Content-Type: application/json
+{
+  "visit_order": 9,
+  "version": 2
+}
+
+HTTP 400
+[Asserts]
+jsonpath "$.error" contains "between 1 and 3"
+
+# Move Second from 3 to 1: Inserted and First shift down
 PUT {{host}}/api/locations/{{second_id}}
 Content-Type: application/json
 {
   "visit_order": 1,
-  "version": 1
-}
-
-HTTP 400
-[Asserts]
-jsonpath "$.error" contains "visit_order"
-
-# Move to a free position. Version 1 still works, which proves
-# that the rejected update above did not change the location.
-PUT {{host}}/api/locations/{{second_id}}
-Content-Type: application/json
-{
-  "visit_order": 5,
-  "version": 1
+  "version": 2
 }
 
 HTTP 200
 [Asserts]
-jsonpath "$.visit_order" == 5
-jsonpath "$.version" == 2
+jsonpath "$.visit_order" == 1
+jsonpath "$.version" == 3
+
+GET {{host}}/api/travel-plans/{{plan_id}}
+
+HTTP 200
+[Asserts]
+jsonpath "$.locations[0].name" == "Second"
+jsonpath "$.locations[1].name" == "Inserted"
+jsonpath "$.locations[2].name" == "First"
+jsonpath "$.locations[2].visit_order" == 3
+
+# Move Second back from 1 to 3: the others shift up
+PUT {{host}}/api/locations/{{second_id}}
+Content-Type: application/json
+{
+  "visit_order": 3,
+  "version": 3
+}
+
+HTTP 200
+[Asserts]
+jsonpath "$.visit_order" == 3
+jsonpath "$.version" == 4
 
 # Next automatic position is MAX + 1
 POST {{host}}/api/travel-plans/{{plan_id}}/locations
@@ -231,14 +275,14 @@ Content-Type: application/json
 
 HTTP 201
 [Asserts]
-jsonpath "$.visit_order" == 6
+jsonpath "$.visit_order" == 4
 
 # Departure before the saved arrival is rejected
 PUT {{host}}/api/locations/{{first_id}}
 Content-Type: application/json
 {
   "departure_date": "2025-06-10T07:00:00Z",
-  "version": 1
+  "version": 4
 }
 
 HTTP 400
@@ -250,7 +294,7 @@ PUT {{host}}/api/locations/{{first_id}}
 Content-Type: application/json
 {
   "departure_date": "2025-06-10T12:00:00",
-  "version": 1
+  "version": 4
 }
 
 HTTP 400
@@ -262,11 +306,13 @@ GET {{host}}/api/travel-plans/{{plan_id}}
 
 HTTP 200
 [Asserts]
-jsonpath "$.locations" count == 3
-jsonpath "$.locations[0].name" == "First"
-jsonpath "$.locations[0].version" == 1
-jsonpath "$.locations[1].visit_order" == 5
-jsonpath "$.locations[2].visit_order" == 6
+jsonpath "$.locations" count == 4
+jsonpath "$.locations[0].name" == "Inserted"
+jsonpath "$.locations[1].name" == "First"
+jsonpath "$.locations[1].version" == 4
+jsonpath "$.locations[2].name" == "Second"
+jsonpath "$.locations[3].name" == "Third"
+jsonpath "$.locations[3].visit_order" == 4
 
 # --- Delete ---
 

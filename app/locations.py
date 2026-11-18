@@ -92,14 +92,14 @@ def create_location_router(engine):
             # Serialize location changes within the same plan.
             lock_plan(connection, plan_id)
 
+            count, max_order = plan_order_stats(connection, plan_id)
             if values["visit_order"] is None:
-                values["visit_order"] = connection.execute(
-                    text("""
-                        SELECT COALESCE(MAX(visit_order), 0) + 1
-                        FROM locations WHERE travel_plan_id = :plan_id
-                    """),
-                    {"plan_id": plan_id},
-                ).scalar_one()
+                values["visit_order"] = max_order + 1
+            else:
+                # Insert "in the middle": positions k.. move up by 1.
+                check_order_range(values["visit_order"], count + 1)
+                shift_range(connection, plan_id, values["visit_order"],
+                            max_order, +1)
 
             columns = list(values)
             statement = text(
@@ -145,6 +145,10 @@ def create_location_router(engine):
                     400, "Validation error: invalid field combination"
                 ) from None
 
+            new_order = changes.get("visit_order")
+            if new_order is not None and new_order != current["visit_order"]:
+                move_location(connection, plan_id, current, new_order)
+
             assignments = [
                 f"{field} = :{field}" for field in changes
             ]
@@ -182,40 +186,87 @@ def create_location_router(engine):
             if deleted is None:
                 raise HTTPException(404, "Location not found")
 
-            close_gap(connection, plan_id, deleted.visit_order)
+            # Close the gap: 1,3,4 -> 1,2,3.
+            _, max_order = plan_order_stats(connection, plan_id)
+            shift_range(connection, plan_id, deleted.visit_order + 1,
+                        max_order, -1)
 
         return Response(status_code=204)
 
     return router
 
 
-def close_gap(connection, plan_id, removed_order):
-    """Shift the locations after a deleted one down by 1 (1,3,4 -> 1,2,3).
+def plan_order_stats(connection, plan_id):
+    row = connection.execute(
+        text("""
+            SELECT COUNT(*), COALESCE(MAX(visit_order), 0)
+            FROM locations WHERE travel_plan_id = :plan_id
+        """),
+        {"plan_id": plan_id},
+    ).one()
+    return row[0], row[1]
 
-    The caller holds the plan lock. Rows move one at a time in ascending
-    order, so each target number is already free and the non-deferrable
-    UNIQUE (travel_plan_id, visit_order) is never violated mid-way.
-    A single UPDATE could visit rows in any order and hit the constraint.
+
+def check_order_range(order, highest):
+    if order > highest:
+        raise HTTPException(
+            400,
+            f"Validation error: visit_order must be between 1 and {highest}",
+        )
+
+
+def shift_range(connection, plan_id, low, high, delta):
+    """Move visit_order of locations in [low, high] by delta (+1 or -1).
+
+    The caller holds the plan lock. Rows move one at a time, starting
+    from the end they move towards (descending for +1, ascending for -1),
+    so each target number is already free and the non-deferrable UNIQUE
+    (travel_plan_id, visit_order) is never violated mid-way. A single
+    UPDATE could visit rows in any order and hit the constraint.
     The version grows because visit_order of these locations changes.
     """
-    later = connection.execute(
-        text("""
+    direction = "DESC" if delta > 0 else "ASC"
+    ids = connection.execute(
+        text(f"""
             SELECT id FROM locations
-            WHERE travel_plan_id = :plan_id AND visit_order > :removed
-            ORDER BY visit_order
+            WHERE travel_plan_id = :plan_id
+              AND visit_order BETWEEN :low AND :high
+            ORDER BY visit_order {direction}
         """),
-        {"plan_id": plan_id, "removed": removed_order},
+        {"plan_id": plan_id, "low": low, "high": high},
     ).scalars().all()
 
-    for location_id in later:
+    for location_id in ids:
         connection.execute(
             text("""
                 UPDATE locations
-                SET visit_order = visit_order - 1, version = version + 1
+                SET visit_order = visit_order + :delta,
+                    version = version + 1
                 WHERE id = :id
             """),
-            {"id": location_id},
+            {"id": location_id, "delta": delta},
         )
+
+
+def move_location(connection, plan_id, current, new_order):
+    """Move a location to new_order; the locations in between shift.
+
+    Example: 1 A, 2 B, 3 C, 4 D; move D to 2 -> 1 A, 2 D, 3 B, 4 C.
+    The moving row first parks on a free number (MAX + 1), then the
+    neighbours shift, then the caller's UPDATE sets new_order.
+    """
+    count, max_order = plan_order_stats(connection, plan_id)
+    check_order_range(new_order, count)
+    old_order = current["visit_order"]
+
+    connection.execute(
+        text("UPDATE locations SET visit_order = :free WHERE id = :id"),
+        {"free": max_order + 1, "id": current["id"]},
+    )
+    if new_order < old_order:
+        shift_range(connection, plan_id, new_order, old_order - 1, +1)
+    else:
+        shift_range(connection, plan_id, old_order + 1, new_order, -1)
 
 
 def location_conflict(current_version):
