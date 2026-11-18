@@ -74,3 +74,10 @@ def test_openapi_endpoint_serves_contract():
 
     assert response.status_code == 200
     assert response.json() == SPEC
+
+
+def test_docs_call_the_serving_host():
+    # A fixed host such as localhost:3000 breaks "Try it out" in /docs.
+    assert SPEC["servers"] == [
+        {"url": "/", "description": "The server hosting this page"}
+    ]

@@ -112,6 +112,10 @@ for route, methods in (
             "400", {"$ref": "#/components/responses/ValidationError"}
         )
 
+# The template pointed at http://localhost:3000. A relative URL makes
+# "Try it out" in /docs call whichever host and port serves the page.
+spec["servers"] = [{"url": "/", "description": "The server hosting this page"}]
+
 path.write_text(
     json.dumps(spec, ensure_ascii=False, indent=2) + "\n",
     encoding="utf-8",
